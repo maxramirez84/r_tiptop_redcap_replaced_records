@@ -1,4 +1,18 @@
 library(stringr)
+library(redcapAPI)
+
+FormatREDCapData <- function(log.string) {
+  
+  key.value.pairs <- trimws(str_split(log.string, ",")[[1]])
+  
+  key.value.pairs.vector = c()
+  for (i in key.value.pairs) {
+    key.value <- trimws(str_split(i, "=")[[1]])
+    key.value.pairs.vector[key.value[1]] <- str_remove_all(key.value[2], "'")
+  }
+  
+  return(key.value.pairs.vector)
+}
 
 # Read REDCap logging file (It must be manually downloaded from the REDCap 
 # project. There's no API call to retrieve logs)
