@@ -1,3 +1,4 @@
+library(stringr)
 
 # Read REDCap logging file (It must be manually downloaded from the REDCap 
 # project. There's no API call to retrieve logs)
@@ -6,7 +7,7 @@ logs <- read.csv(kLoggingFileName)
 colnames(logs) <- c("datetime", "username", "action", "data")
 
 # Keep only logs related to record creation through the API
-kRecordCreatedPattern <- "Created Record (API)"
+kRecordCreatedPattern <- "Created Record \\(API\\)"
 logs <- logs[which(startsWith(logs$action, kRecordCreatedPattern)), ]
 
 # Keep only log entries which are duplicated on the Action column, i.e.
@@ -14,3 +15,6 @@ logs <- logs[which(startsWith(logs$action, kRecordCreatedPattern)), ]
 replaced.cond <- duplicated(logs$action) | duplicated(logs$action, fromLast = T)
 replaced <- logs[replaced.cond, ]
 replaced <- replaced[order(replaced$action, replaced$datetime), ]
+
+# Extract record id from the action column
+replaced$record_id <- trimws(str_remove(replaced$action, kRecordCreatedPattern))
