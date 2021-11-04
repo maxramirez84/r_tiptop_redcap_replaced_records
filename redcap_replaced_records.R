@@ -11,7 +11,8 @@ FormatREDCapData <- function(log.string) {
     key.value.pairs.vector[key.value[1]] <- str_remove_all(key.value[2], "'")
   }
   
-  return(key.value.pairs.vector)
+  record.data <- data.frame(as.list(key.value.pairs.vector))
+  return(record.data)
 }
 
 # Read REDCap logging file (It must be manually downloaded from the REDCap 
