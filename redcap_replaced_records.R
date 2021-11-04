@@ -1,5 +1,6 @@
 library(stringr)
 library(redcapAPI)
+library(dplyr)
 
 source("tokens.R")
 
@@ -10,13 +11,41 @@ kRecordCreatedPatternScaped <- "Created Record \\(API\\)"
 kFileFields <- c("anc_card_pic")
 
 FormatREDCapData <- function(log.string) {
+  #browser()
+  # Extract key-value pairs by regex
+  kKeyValuePattern   <- "\\w+ = '(\\w*[-!: ,\\\".\\(\\)\\*]*\\w*)*'"
+  kMultiChoicePatter <- "\\w+\\(\\d+\\) = checked"
+  record.data.fields <- c(
+    unlist(str_extract_all(
+      string  = log.string,
+      pattern = kKeyValuePattern
+    )),
+    unlist(str_extract_all(
+      string  = log.string,
+      pattern = kMultiChoicePatter
+    ))
+  )
   
-  key.value.pairs <- trimws(str_split(log.string, ",")[[1]])
-  
+  # For each field
   key.value.pairs.vector = c()
-  for (i in key.value.pairs) {
-    key.value <- trimws(str_split(i, "=")[[1]])
-    key.value.pairs.vector[key.value[1]] <- str_remove_all(key.value[2], "'")
+  if (length(record.data.fields) > 0) {
+    # Split key and value separated by the equal sign
+    for (j in record.data.fields) { 
+      key.value.pair <- trimws(unlist(strsplit(j, "=")))
+      
+      # If multi-choice variable, change name from var_name(n) to var_name___n
+      kMultiChoiceREDCapPattern <- ".*\\((\\d+)\\)"
+      key   <- key.value.pair[1]
+      value <- key.value.pair[2]
+      if (grepl(kMultiChoiceREDCapPattern, key)) {
+        key <- paste0(
+          unlist(strsplit(key, "\\("))[1], 
+          "___", 
+          sub(kMultiChoiceREDCapPattern, "\\1", key)
+        )
+      }
+      key.value.pairs.vector[key] <- str_remove_all(value, "'")
+    }
   }
   
   record.data <- data.frame(as.list(key.value.pairs.vector))
@@ -43,10 +72,11 @@ replaced$record_id <- trimws(str_remove(
   pattern = kRecordCreatedPatternScaped
 ))
 
-# Connect to REDCap and remove data from replaced records
+# Connect to REDCap
 redcap.connection <- redcapConnection(kREDCapAPIURL, kAPIToken)
 field.names <- exportFieldNames(redcap.connection)
 
+# Remove data from replaced records
 for (i in unique(replaced$record_id)) {
   # Create empty record to be imported in REDCap for removing data of replaced
   # record. We want to keep the record empty with their history.
@@ -75,3 +105,20 @@ for (i in unique(replaced$record_id)) {
     overwriteBehavior = "overwrite"
   )
 }
+
+# Import replaced and replacement data as NEW records
+data <- c()
+data[field.names$export_field_name] <- NA
+data <- data.frame(as.list(data))
+
+for (i in replaced$data) {
+  print(i)
+  data <- bind_rows(data, FormatREDCapData(i))
+}
+
+data <- data[-1, ]
+next.record.id <- exportNextRecordName(redcap.connection)
+new.records.ids <- next.record.id:(next.record.id + nrow(data) - 1)
+data$record_id <- new.records.ids
+
+importRecords(redcap.connection, data, batch.size = 500)
